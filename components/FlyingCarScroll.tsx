@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { useScroll, motion, useTransform, useSpring } from "framer-motion";
+import { motion, useTransform, useSpring, useMotionValue } from "framer-motion";
 import CarTextOverlays from "./CarTextOverlays";
 import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkles } from "lucide-react";
 
@@ -93,11 +93,36 @@ export default function FlyingCarScroll() {
     isAirborne: false,
   });
 
-  // Track raw scroll progress across the 220vh container
-  const { scrollYProgress } = useScroll({
-    target: containerRef,
-    offset: ["start start", "end end"],
-  });
+  // Raw scroll progress (0..1) across the section, measured directly from the DOM.
+  // Re-measured on scroll, resize, load and a few early frames so the hero can never
+  // start in a wrong (blank) state if fonts/images shift the layout after mount.
+  const scrollYProgress = useMotionValue(0);
+
+  useEffect(() => {
+    const measure = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const total = el.offsetHeight - window.innerHeight;
+      const raw = total > 0 ? -rect.top / total : 0;
+      scrollYProgress.set(Math.min(1, Math.max(0, raw)));
+    };
+    measure();
+    let n = 0;
+    let id = requestAnimationFrame(function tick() {
+      measure();
+      if (++n < 30) id = requestAnimationFrame(tick);
+    });
+    window.addEventListener("scroll", measure, { passive: true });
+    window.addEventListener("resize", measure);
+    window.addEventListener("load", measure);
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("load", measure);
+    };
+  }, [scrollYProgress]);
 
   // Spring-smoothed progress for buttery 60/120fps motion across gestures
   const smoothProgress = useSpring(scrollYProgress, {
@@ -106,6 +131,11 @@ export default function FlyingCarScroll() {
     mass: 0.12,
     restDelta: 0.0001,
   });
+
+  // Snap the spring to the real position on first paint (no animated "catch-up" from a wrong value)
+  useEffect(() => {
+    smoothProgress.jump(scrollYProgress.get());
+  }, [smoothProgress, scrollYProgress]);
 
   // Hero overlay opacity (fades out cleanly before Phase 01 arrives)
   const heroOpacity = useTransform(smoothProgress, [0, 0.05, 0.10], [1, 0.4, 0]);
@@ -353,8 +383,8 @@ export default function FlyingCarScroll() {
         if (isCancelled) return;
         loaded++;
         setLoadedCount(loaded);
-        if (loaded === 1) {
-          renderFrame(0, performance.now());
+        if (i - 1 === currentFrameRef.current || loaded === 1) {
+          renderFrame(currentFrameRef.current, performance.now());
         }
         if (loaded >= TOTAL_FRAMES) {
           setIsLoaded(true);
@@ -493,7 +523,10 @@ export default function FlyingCarScroll() {
       className="relative h-[220vh] w-full bg-[#050505]"
     >
       {/* Sticky Fullscreen Canvas Viewport */}
-      <div className="sticky top-0 h-screen min-h-screen w-full overflow-hidden flex items-center justify-center shrink-0">
+      <div
+          className="sticky top-0 h-screen min-h-screen w-full overflow-hidden flex items-center justify-center shrink-0 bg-cover bg-center"
+          style={{ backgroundImage: "url(/images/aeron/1.webp)", backgroundColor: "#050505" }}
+        >
         {/* Full-bleed HTML5 Canvas (edge-to-edge cover with Math.max) */}
         <canvas
           ref={canvasRef}
@@ -531,11 +564,8 @@ export default function FlyingCarScroll() {
           style={{ opacity: heroOpacity, pointerEvents: heroPointerEvents as unknown as "auto" | "none" }}
           className="absolute inset-0 z-30 flex flex-col justify-between p-6 sm:p-10 md:p-16 max-w-7xl mx-auto w-full pointer-events-none"
         >
-          {/* Top spacer for navbar */}
-          <div className="pt-16 sm:pt-20" />
-
-          {/* Central Hero Content */}
-          <div className="max-w-3xl space-y-6 pointer-events-auto">
+          {/* TOP: navbar spacer + badge + headline (stays up) */}
+          <div className="pt-16 sm:pt-20 max-w-3xl space-y-5 pointer-events-auto">
             <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-neonRed animate-pulse shadow-[0_0_8px_#FF2638]" />
               <span className="text-[10px] md:text-xs font-mono uppercase tracking-[0.25em] text-neutral-300">
@@ -543,19 +573,21 @@ export default function FlyingCarScroll() {
               </span>
             </div>
 
-            <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black uppercase tracking-tight text-white leading-[0.88] drop-shadow-2xl">
+            <h1 className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-black uppercase tracking-tight text-white leading-[0.88] drop-shadow-2xl">
               THE SKY <br />
               <span className="bg-gradient-to-r from-white via-silver to-neutral-400 bg-clip-text text-transparent">
                 IS YOURS.
               </span>
             </h1>
+          </div>
 
-            <p className="text-base sm:text-xl md:text-2xl text-silver/85 font-light tracking-wide max-w-xl">
+          {/* BOTTOM: all other text + buttons move down, leaving the car visible in the middle */}
+          <div className="space-y-5 pointer-events-auto">
+            <p className="text-base sm:text-lg md:text-xl text-silver/85 font-light tracking-wide max-w-xl">
               A new dimension of motion. Blending supercar racetrack dynamics with unrestricted, zero-emission atmospheric flight.
             </p>
 
-            {/* Hero CTAs */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
               <button
                 onClick={scrollToSequence}
                 className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-gradient-to-r from-crimson to-neonRed text-white font-semibold text-xs uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(255,38,56,0.4)] hover:shadow-[0_0_40px_rgba(255,38,56,0.7)] transition-all duration-300 active:scale-95"
@@ -571,22 +603,21 @@ export default function FlyingCarScroll() {
                 <span>DISCOVER THE VEHICLE</span>
               </button>
             </div>
-          </div>
 
-          {/* Bottom Hero Scroll Prompt (Fades out with Hero to prevent collisions) */}
-          <div className="flex items-center justify-between border-t border-white/10 pt-4 pointer-events-auto">
-            <div className="flex items-center gap-2.5 text-xs uppercase tracking-[0.18em] text-neutral-400 font-mono">
-              <span className="w-2 h-2 rounded-full bg-electricBlue shadow-[0_0_8px_#56C8FF]" />
-              <span>Fluid 40-Frame Flight Transformation</span>
+            <div className="flex items-center justify-between border-t border-white/10 pt-4">
+              <div className="flex items-center gap-2.5 text-xs uppercase tracking-[0.18em] text-neutral-400 font-mono">
+                <span className="w-2 h-2 rounded-full bg-electricBlue shadow-[0_0_8px_#56C8FF]" />
+                <span>Fluid 40-Frame Flight Transformation</span>
+              </div>
+
+              <button
+                onClick={scrollToSequence}
+                className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-silver/80 hover:text-white transition-colors"
+              >
+                <span>Scroll to launch</span>
+                <ChevronDown className="w-4 h-4 animate-bounce" />
+              </button>
             </div>
-
-            <button
-              onClick={scrollToSequence}
-              className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-silver/80 hover:text-white transition-colors"
-            >
-              <span>Scroll to launch</span>
-              <ChevronDown className="w-4 h-4 animate-bounce" />
-            </button>
           </div>
         </motion.div>
 
