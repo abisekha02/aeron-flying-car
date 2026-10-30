@@ -16,38 +16,57 @@ interface TelemetryData {
   isAirborne: boolean;
 }
 
+const PHASES_TIMELINE = [
+  { id: 1, label: "01 Runway", maxFrame: 5 },
+  { id: 2, label: "02 Ascent", maxFrame: 13 },
+  { id: 3, label: "03 Inversion", maxFrame: 19 },
+  { id: 4, label: "04 Takeoff", maxFrame: 25 },
+  { id: 5, label: "05 Flight Cruise", maxFrame: 34 },
+  { id: 6, label: "06 Landing", maxFrame: 39 },
+];
+
 /**
- * Maps scroll progress (0..1) to frame index (0..39) with custom pacing:
- * - 0.00 -> 0.58 : Rapid 1-2 gesture transformation (runway -> ramp -> inversion -> flip upright into flight)
- * - 0.58 -> 0.85 : Sustained cruising flight with glowing thrusters (held so user can appreciate the flying car)
- * - 0.85 -> 1.00 : Smooth descent and landing
+ * Maps scroll progress (0..1) to frame index (0..39) with optimized pacing:
+ * - 0.00 -> 0.10 : Hero screen (Frame 0)
+ * - 0.10 -> 0.22 : Runway acceleration (Frames 0 -> 5)
+ * - 0.22 -> 0.36 : Curved ramp ascent (Frames 6 -> 13)
+ * - 0.36 -> 0.48 : Inverted 0-G loop (Frames 14 -> 19)
+ * - 0.48 -> 0.58 : Takeoff ramp departure & flip upright into flight (Frames 20 -> 25)
+ *                  -> By 0.58 (1-2 scroll gestures), transformation is 100% complete!
+ * - 0.58 -> 0.86 : Sustained cruising flight with glowing thrusters (Frames 26 -> 34)
+ *                  -> Held across 28% of the scroll for dedicated appreciation!
+ * - 0.86 -> 0.96 : Touchdown descent & landing (Frames 35 -> 39)
+ * - 0.96 -> 1.00 : Smooth handover to Engineering
  */
 function mapProgressToFrame(progress: number): number {
   const p = Math.min(1, Math.max(0, progress));
 
-  if (p <= 0.15) {
-    // 0.00 -> 0.15 : Frames 0 -> 5 (Runway acceleration)
-    const t = p / 0.15;
+  if (p <= 0.10) {
+    // 0.00 -> 0.10 : Hero idle on runway
+    return 0;
+  } else if (p <= 0.22) {
+    // 0.10 -> 0.22 : Runway acceleration
+    const t = (p - 0.10) / 0.12;
     return Math.min(5, Math.floor(t * 6));
-  } else if (p <= 0.30) {
-    // 0.15 -> 0.30 : Frames 6 -> 13 (Ramp ascent)
-    const t = (p - 0.15) / 0.15;
+  } else if (p <= 0.36) {
+    // 0.22 -> 0.36 : Ramp ascent
+    const t = (p - 0.22) / 0.14;
     return Math.min(13, 6 + Math.floor(t * 8));
-  } else if (p <= 0.44) {
-    // 0.30 -> 0.44 : Frames 14 -> 19 (Inverted arc)
-    const t = (p - 0.30) / 0.14;
+  } else if (p <= 0.48) {
+    // 0.36 -> 0.48 : Inverted arc
+    const t = (p - 0.36) / 0.12;
     return Math.min(19, 14 + Math.floor(t * 6));
   } else if (p <= 0.58) {
-    // 0.44 -> 0.58 : Frames 20 -> 25 (Takeoff & flip upright)
-    const t = (p - 0.44) / 0.14;
+    // 0.48 -> 0.58 : Takeoff & flip upright
+    const t = (p - 0.48) / 0.10;
     return Math.min(25, 20 + Math.floor(t * 6));
-  } else if (p <= 0.85) {
-    // 0.58 -> 0.85 : Frames 26 -> 34 (Full flight with illuminated thrusters - sustained appreciation plateau!)
-    const t = (p - 0.58) / 0.27;
+  } else if (p <= 0.86) {
+    // 0.58 -> 0.86 : Full flight with thrusters (sustained cruise plateau)
+    const t = (p - 0.58) / 0.28;
     return Math.min(34, 26 + Math.floor(t * 9));
   } else {
-    // 0.85 -> 1.00 : Frames 35 -> 39 (Descent & runway landing)
-    const t = (p - 0.85) / 0.15;
+    // 0.86 -> 1.00 : Descent & runway touchdown
+    const t = Math.min(1, (p - 0.86) / 0.11);
     return Math.min(39, 35 + Math.floor(t * 5));
   }
 }
@@ -63,6 +82,8 @@ export default function FlyingCarScroll() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [hasMissingFrames, setHasMissingFrames] = useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [activeFrame, setActiveFrame] = useState(0);
+
   const [telemetry, setTelemetry] = useState<TelemetryData>({
     speed: 0,
     altitude: 0,
@@ -72,7 +93,7 @@ export default function FlyingCarScroll() {
     isAirborne: false,
   });
 
-  // Track raw scroll progress across the compact 190vh section
+  // Track raw scroll progress across the 220vh container
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"],
@@ -86,11 +107,28 @@ export default function FlyingCarScroll() {
     restDelta: 0.0001,
   });
 
-  // Hero overlay opacity (fades as user initiates the first gesture)
-  const heroOpacity = useTransform(smoothProgress, [0, 0.04, 0.12], [1, 0.5, 0]);
-  const heroPointerEvents = useTransform(smoothProgress, (val) => (val < 0.08 ? "auto" : "none"));
+  // Hero overlay opacity (fades out cleanly before Phase 01 arrives)
+  const heroOpacity = useTransform(smoothProgress, [0, 0.05, 0.10], [1, 0.4, 0]);
+  const heroPointerEvents = useTransform(smoothProgress, (val) => (val < 0.07 ? "auto" : "none"));
 
-  // Procedural canvas fallback if images are completely absent or loading
+  // Bottom sequence timeline bar opacity (fades in only AFTER Hero has faded out!)
+  const timelineOpacity = useTransform(smoothProgress, [0.06, 0.12], [0, 1]);
+
+  // Dynamic active phase index based on current frame
+  const activePhaseIdx =
+    activeFrame <= 5
+      ? 0
+      : activeFrame <= 13
+      ? 1
+      : activeFrame <= 19
+      ? 2
+      : activeFrame <= 25
+      ? 3
+      : activeFrame <= 34
+      ? 4
+      : 5;
+
+  // Procedural canvas fallback if images are loading or missing
   const drawProceduralFallback = useCallback(
     (ctx: CanvasRenderingContext2D, width: number, height: number, progress: number) => {
       ctx.clearRect(0, 0, width, height);
@@ -202,7 +240,11 @@ export default function FlyingCarScroll() {
     []
   );
 
-  // Render a specific frame onto the canvas with atmospheric hover physics during cruise
+  /**
+   * Render frame onto the canvas using full-bleed COVER algorithm.
+   * Math.max(hRatio, vRatio) ensures zero black bars on left/right/top/bottom,
+   * filling the entire viewport seamlessly.
+   */
   const renderFrame = useCallback(
     (frameIndex: number, timeMs: number = 0) => {
       const canvas = canvasRef.current;
@@ -216,13 +258,15 @@ export default function FlyingCarScroll() {
       if (img && img.complete && img.naturalWidth > 0) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Aspect-ratio preserving contain logic
+        // FULL VIEWPORT COVER (Math.max) - Eliminates pillarboxes/letterboxes completely
         const hRatio = canvas.width / img.naturalWidth;
         const vRatio = canvas.height / img.naturalHeight;
-        const ratio = Math.min(hRatio, vRatio);
+        const ratio = Math.max(hRatio, vRatio);
 
-        let centerShiftX = (canvas.width - img.naturalWidth * ratio) / 2;
-        let centerShiftY = (canvas.height - img.naturalHeight * ratio) / 2;
+        const drawWidth = img.naturalWidth * ratio;
+        const drawHeight = img.naturalHeight * ratio;
+        const centerShiftX = (canvas.width - drawWidth) / 2;
+        let centerShiftY = (canvas.height - drawHeight) / 2;
 
         // In the airborne cruising phase (frames 26..34), add cinematic floating hover dynamics
         const isCruise = frameIndex >= 26 && frameIndex <= 34;
@@ -238,10 +282,10 @@ export default function FlyingCarScroll() {
             10,
             canvas.width * 0.48,
             canvas.height * 0.52 + hoverY,
-            canvas.width * 0.35
+            canvas.width * 0.4
           );
-          auraGrad.addColorStop(0, `rgba(86, 200, 255, ${0.14 * thrusterPulse})`);
-          auraGrad.addColorStop(0.5, `rgba(86, 200, 255, ${0.04 * thrusterPulse})`);
+          auraGrad.addColorStop(0, `rgba(86, 200, 255, ${0.16 * thrusterPulse})`);
+          auraGrad.addColorStop(0.5, `rgba(86, 200, 255, ${0.05 * thrusterPulse})`);
           auraGrad.addColorStop(1, "transparent");
           ctx.fillStyle = auraGrad;
           ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -255,8 +299,8 @@ export default function FlyingCarScroll() {
           img.naturalHeight,
           centerShiftX,
           centerShiftY,
-          img.naturalWidth * ratio,
-          img.naturalHeight * ratio
+          drawWidth,
+          drawHeight
         );
       } else {
         drawProceduralFallback(
@@ -352,6 +396,7 @@ export default function FlyingCarScroll() {
     const unsubscribe = smoothProgress.on("change", (latest) => {
       const frameIndex = mapProgressToFrame(latest);
       currentFrameRef.current = frameIndex;
+      setActiveFrame(frameIndex);
 
       let speed = 0;
       let altitude = 0;
@@ -416,7 +461,6 @@ export default function FlyingCarScroll() {
   useEffect(() => {
     let animId: number;
     const loop = (time: number) => {
-      // Re-render only if in flight mode to provide living atmospheric hover
       if (currentFrameRef.current >= 26 && currentFrameRef.current <= 34) {
         renderFrame(currentFrameRef.current, time);
       }
@@ -446,14 +490,14 @@ export default function FlyingCarScroll() {
     <section
       id="experience"
       ref={containerRef}
-      className="relative h-[190vh] w-full bg-[#050505]"
+      className="relative h-[220vh] w-full bg-[#050505]"
     >
       {/* Sticky Fullscreen Canvas Viewport */}
-      <div className="sticky top-0 h-screen w-full overflow-hidden flex items-center justify-center">
-        {/* HTML5 Canvas */}
+      <div className="sticky top-0 h-screen min-h-screen w-full overflow-hidden flex items-center justify-center shrink-0">
+        {/* Full-bleed HTML5 Canvas (edge-to-edge cover with Math.max) */}
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none z-0"
+          className="absolute inset-0 w-full h-full pointer-events-none select-none z-0"
         />
 
         {/* Ambient Glow Atmosphere Behind Canvas */}
@@ -482,16 +526,16 @@ export default function FlyingCarScroll() {
           </div>
         )}
 
-        {/* HERO SECTION OVERLAY (Active at the start of scroll) */}
+        {/* HERO SECTION OVERLAY (Active at the start of scroll, cleanly crossfades out before Phase 1) */}
         <motion.div
           style={{ opacity: heroOpacity, pointerEvents: heroPointerEvents as unknown as "auto" | "none" }}
-          className="absolute inset-0 z-30 flex flex-col justify-between p-6 sm:p-12 md:p-16 max-w-7xl mx-auto w-full"
+          className="absolute inset-0 z-30 flex flex-col justify-between p-6 sm:p-10 md:p-16 max-w-7xl mx-auto w-full pointer-events-none"
         >
           {/* Top spacer for navbar */}
-          <div className="pt-20" />
+          <div className="pt-16 sm:pt-20" />
 
           {/* Central Hero Content */}
-          <div className="max-w-3xl space-y-6">
+          <div className="max-w-3xl space-y-6 pointer-events-auto">
             <div className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-white/[0.04] border border-white/10 backdrop-blur-md">
               <span className="w-2 h-2 rounded-full bg-neonRed animate-pulse shadow-[0_0_8px_#FF2638]" />
               <span className="text-[10px] md:text-xs font-mono uppercase tracking-[0.25em] text-neutral-300">
@@ -506,12 +550,12 @@ export default function FlyingCarScroll() {
               </span>
             </h1>
 
-            <p className="text-lg sm:text-xl md:text-2xl text-silver/80 font-light tracking-wide max-w-xl">
+            <p className="text-base sm:text-xl md:text-2xl text-silver/85 font-light tracking-wide max-w-xl">
               A new dimension of motion. Blending supercar racetrack dynamics with unrestricted, zero-emission atmospheric flight.
             </p>
 
             {/* Hero CTAs */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
               <button
                 onClick={scrollToSequence}
                 className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 rounded-full bg-gradient-to-r from-crimson to-neonRed text-white font-semibold text-xs uppercase tracking-[0.2em] shadow-[0_0_30px_rgba(255,38,56,0.4)] hover:shadow-[0_0_40px_rgba(255,38,56,0.7)] transition-all duration-300 active:scale-95"
@@ -529,16 +573,16 @@ export default function FlyingCarScroll() {
             </div>
           </div>
 
-          {/* Bottom Hero Scroll Prompt */}
-          <div className="flex items-center justify-between border-t border-white/10 pt-6">
-            <div className="flex items-center gap-3 text-xs uppercase tracking-[0.2em] text-neutral-400 font-mono">
+          {/* Bottom Hero Scroll Prompt (Fades out with Hero to prevent collisions) */}
+          <div className="flex items-center justify-between border-t border-white/10 pt-4 pointer-events-auto">
+            <div className="flex items-center gap-2.5 text-xs uppercase tracking-[0.18em] text-neutral-400 font-mono">
               <span className="w-2 h-2 rounded-full bg-electricBlue shadow-[0_0_8px_#56C8FF]" />
               <span>Fluid 40-Frame Flight Transformation</span>
             </div>
 
             <button
               onClick={scrollToSequence}
-              className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-silver/70 hover:text-white transition-colors"
+              className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-silver/80 hover:text-white transition-colors"
             >
               <span>Scroll to launch</span>
               <ChevronDown className="w-4 h-4 animate-bounce" />
@@ -546,11 +590,11 @@ export default function FlyingCarScroll() {
           </div>
         </motion.div>
 
-        {/* SCROLLYTELLING TEXT OVERLAYS (Synchronized with smoothProgress) */}
+        {/* SCROLLYTELLING TEXT OVERLAYS (Synchronized with smoothProgress, starting cleanly after Hero) */}
         <CarTextOverlays progress={smoothProgress} />
 
-        {/* FLIGHT TELEMETRY HUD BAR (Floating at the top right) */}
-        <div className="absolute top-20 right-4 sm:right-6 md:right-12 z-20 hidden sm:flex flex-col gap-2 pointer-events-none">
+        {/* FLIGHT TELEMETRY HUD BAR (Sitting squarely over the covered canvas background) */}
+        <div className="absolute top-20 right-4 sm:right-6 md:right-10 z-20 hidden sm:flex flex-col gap-2 pointer-events-none">
           <div className="glass-panel px-4 py-2.5 rounded-xl border border-white/10 font-mono text-[11px] text-silver space-y-1 shadow-2xl">
             <div className="flex items-center justify-between gap-4 text-neutral-400">
               <span className="flex items-center gap-1.5">
@@ -596,23 +640,38 @@ export default function FlyingCarScroll() {
           </div>
         </div>
 
-        {/* Bottom Sequence Progress Bar */}
-        <div className="absolute bottom-4 left-4 right-4 md:left-14 md:right-14 z-20 pointer-events-none">
-          <div className="flex items-center justify-between text-[10px] font-mono text-neutral-400 mb-1.5 uppercase tracking-wider">
-            <span>01 Runway</span>
-            <span>02 Ascent</span>
-            <span>03 Inversion</span>
-            <span>04 Takeoff</span>
-            <span className="text-electricBlue font-bold">05 Cruise Flight</span>
-            <span>06 Landing</span>
+        {/* BOTTOM SEQUENCE TIMELINE (Fades in ONLY AFTER Hero fades out - eliminates collisions!) */}
+        <motion.div
+          style={{ opacity: timelineOpacity }}
+          className="absolute bottom-5 left-4 right-4 md:left-14 md:right-14 z-20 pointer-events-none"
+        >
+          {/* Dynamically highlighted timeline labels based on active phase */}
+          <div className="flex items-center justify-between text-[10px] font-mono mb-1.5 uppercase tracking-wider">
+            {PHASES_TIMELINE.map((phase, idx) => {
+              const isActive = idx === activePhaseIdx;
+              return (
+                <span
+                  key={phase.id}
+                  className={`transition-colors duration-300 ${
+                    isActive
+                      ? "text-electricBlue font-bold drop-shadow-[0_0_8px_rgba(86,200,255,0.7)]"
+                      : "text-neutral-500"
+                  }`}
+                >
+                  {phase.label}
+                </span>
+              );
+            })}
           </div>
+
+          {/* Smooth progress bar */}
           <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden backdrop-blur-sm">
             <motion.div
               style={{ scaleX: smoothProgress, transformOrigin: "left" }}
               className="h-full bg-gradient-to-r from-neonRed via-white to-electricBlue"
             />
           </div>
-        </div>
+        </motion.div>
 
         {/* Accessibility Notice for Reduced Motion */}
         {prefersReducedMotion && (
@@ -620,6 +679,9 @@ export default function FlyingCarScroll() {
             Reduced motion mode active
           </div>
         )}
+
+        {/* Seamless bottom gradient bleed to handover smoothly into FlightTechnology */}
+        <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-b from-transparent to-[#08090C] pointer-events-none z-10" />
       </div>
     </section>
   );

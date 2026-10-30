@@ -19,7 +19,7 @@ export default function FlightTechnology() {
     TECHNOLOGY_PILLARS.find((p) => p.id === activePillarId) || TECHNOLOGY_PILLARS[0];
 
   return (
-    <section id="engineering" className="relative py-28 md:py-36 bg-[#08090C] text-silver overflow-hidden">
+    <section id="engineering" className="relative pt-20 pb-28 md:pt-24 md:pb-36 bg-[#08090C] text-silver overflow-hidden">
       {/* Background cyber grid & glow accents */}
       <div className="absolute inset-0 cyber-grid opacity-30 pointer-events-none" />
       <div className="absolute top-1/4 -left-48 w-96 h-96 bg-crimson/15 rounded-full blur-[140px] pointer-events-none" />

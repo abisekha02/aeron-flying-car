@@ -22,22 +22,23 @@ const PHASES: StoryPhase[] = [
   {
     id: 1,
     badge: "PHASE 01 // TARMAC ACCELERATION",
-    headline: "THE SKY IS YOURS.",
+    headline: "UNLEASH THE VECTOR.",
     subtext:
-      "A new dimension of motion. AERON unleashes instantaneous electric torque on the runway.",
+      "A new dimension of motion. Instantaneous electric torque vectoring presses the aerodynamic carbon chassis to the tarmac at 220 km/h.",
     icon: Compass,
     position: "bottom-left",
-    range: [0.0, 0.02, 0.11, 0.15],
+    // Starts ONLY after Hero fades out (0.10) to prevent any ghost overlap
+    range: [0.10, 0.14, 0.21, 0.25],
   },
   {
     id: 2,
     badge: "PHASE 02 // CURVED ASCENT",
     headline: "DEFY THE ORDINARY.",
     subtext:
-      "Climbing the illuminated red launch ramp. Dynamic downforce vectors press the carbon chassis into the curve.",
+      "Climbing the illuminated red launch ramp. Dynamic downforce vectors press the carbon chassis firmly into the curve.",
     icon: Wind,
     position: "bottom-right",
-    range: [0.15, 0.19, 0.28, 0.32],
+    range: [0.23, 0.27, 0.35, 0.39],
   },
   {
     id: 3,
@@ -47,7 +48,7 @@ const PHASES: StoryPhase[] = [
       "Traveling inverted along the apex arc. Gyroscopic telemetry stabilizes the panoramic cockpit at negative Gs.",
     icon: ShieldAlert,
     position: "bottom-left",
-    range: [0.31, 0.35, 0.42, 0.46],
+    range: [0.37, 0.41, 0.48, 0.52],
   },
   {
     id: 4,
@@ -57,7 +58,7 @@ const PHASES: StoryPhase[] = [
       "Launching off the ramp and flipping upright. Dual morphing wings lock into aerodynamic cruising geometry.",
     icon: Sparkles,
     position: "bottom-right",
-    range: [0.45, 0.49, 0.57, 0.61],
+    range: [0.50, 0.54, 0.60, 0.64],
   },
   {
     id: 5,
@@ -67,8 +68,8 @@ const PHASES: StoryPhase[] = [
       "Twin dual-aperture ducted ion thrusters illuminate the night sky in cold electric blue, unlocking 380 km/h unrestricted flight corridors.",
     icon: Cpu,
     position: "bottom-left",
-    // Extended prominence: stays clearly visible throughout the entire sustained flying car cruise
-    range: [0.60, 0.65, 0.82, 0.87],
+    // Held across a generous cruise plateau so the user can thoroughly appreciate the flying car
+    range: [0.62, 0.67, 0.84, 0.88],
   },
   {
     id: 6,
@@ -78,7 +79,7 @@ const PHASES: StoryPhase[] = [
       "Decelerating on automated approach. Airbrakes modulate drag for a velvet-soft touchdown back onto the runway.",
     icon: ArrowDown,
     position: "bottom-center",
-    range: [0.87, 0.91, 0.98, 1.0],
+    range: [0.87, 0.91, 0.96, 1.0],
   },
 ];
 
@@ -89,15 +90,15 @@ function PhaseCard({ phase, progress }: { phase: StoryPhase; progress: MotionVal
   const opacity = useTransform(progress, [startIn, fullIn, startOut, fullOut], [0, 1, 1, 0]);
 
   // Subtle vertical float
-  const y = useTransform(progress, [startIn, fullIn, startOut, fullOut], [24, 0, 0, -24]);
+  const y = useTransform(progress, [startIn, fullIn, startOut, fullOut], [20, 0, 0, -20]);
 
   const Icon = phase.icon;
 
   const positionClasses = {
-    "bottom-left": "bottom-10 md:bottom-20 left-4 md:left-14 max-w-sm md:max-w-lg text-left items-start",
-    "bottom-right": "bottom-10 md:bottom-20 right-4 md:right-14 max-w-sm md:max-w-lg text-left md:text-right items-start md:items-end ml-auto",
+    "bottom-left": "bottom-14 md:bottom-24 left-4 md:left-14 max-w-sm md:max-w-lg text-left items-start",
+    "bottom-right": "bottom-14 md:bottom-24 right-4 md:right-14 max-w-sm md:max-w-lg text-left md:text-right items-start md:items-end ml-auto",
     "top-left": "top-24 left-4 md:left-14 max-w-sm md:max-w-lg text-left items-start",
-    "bottom-center": "bottom-10 md:bottom-20 left-1/2 -translate-x-1/2 max-w-md md:max-w-xl text-center items-center",
+    "bottom-center": "bottom-14 md:bottom-24 left-1/2 -translate-x-1/2 max-w-md md:max-w-xl text-center items-center",
   }[phase.position];
 
   return (
