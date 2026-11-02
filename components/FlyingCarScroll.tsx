@@ -3,9 +3,13 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { motion, useTransform, useSpring, useMotionValue } from "framer-motion";
 import CarTextOverlays from "./CarTextOverlays";
-import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkles } from "lucide-react";
+import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkles, Pause, Play } from "lucide-react";
 
 const TOTAL_FRAMES = 40;
+
+// Autoplay timing
+const HOLD_MS = 4500;       // how long the hero (headline + buttons) stays on screen before the flight starts
+const DURATION_MS = 32000;  // length of one full flight (progress 0 -> 1), then it loops
 
 interface TelemetryData {
   speed: number;
@@ -93,36 +97,12 @@ export default function FlyingCarScroll() {
     isAirborne: false,
   });
 
-  // Raw scroll progress (0..1) across the section, measured directly from the DOM.
-  // Re-measured on scroll, resize, load and a few early frames so the hero can never
-  // start in a wrong (blank) state if fonts/images shift the layout after mount.
+  // Autoplay progress (0..1). Nothing depends on page scrolling any more.
   const scrollYProgress = useMotionValue(0);
-
-  useEffect(() => {
-    const measure = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      const total = el.offsetHeight - window.innerHeight;
-      const raw = total > 0 ? -rect.top / total : 0;
-      scrollYProgress.set(Math.min(1, Math.max(0, raw)));
-    };
-    measure();
-    let n = 0;
-    let id = requestAnimationFrame(function tick() {
-      measure();
-      if (++n < 30) id = requestAnimationFrame(tick);
-    });
-    window.addEventListener("scroll", measure, { passive: true });
-    window.addEventListener("resize", measure);
-    window.addEventListener("load", measure);
-    return () => {
-      cancelAnimationFrame(id);
-      window.removeEventListener("scroll", measure);
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("load", measure);
-    };
-  }, [scrollYProgress]);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [canStart, setCanStart] = useState(false);
+  const holdUntilRef = useRef<number>(0);
+  const visibleRef = useRef<boolean>(true);
 
   // Spring-smoothed progress for buttery 60/120fps motion across gestures
   const smoothProgress = useSpring(scrollYProgress, {
@@ -132,10 +112,54 @@ export default function FlyingCarScroll() {
     restDelta: 0.0001,
   });
 
-  // Snap the spring to the real position on first paint (no animated "catch-up" from a wrong value)
+  // Start once frames are loaded (or after 5s at the latest so a slow network never blocks it)
   useEffect(() => {
-    smoothProgress.jump(scrollYProgress.get());
-  }, [smoothProgress, scrollYProgress]);
+    if (isLoaded) setCanStart(true);
+  }, [isLoaded]);
+  useEffect(() => {
+    const t = setTimeout(() => setCanStart(true), 5000);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Only play while the hero is on screen
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        visibleRef.current = entries[0]?.isIntersecting ?? true;
+      },
+      { threshold: 0.15 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // AUTOPLAY DRIVER: advances progress over time and loops
+  useEffect(() => {
+    if (!canStart || !isPlaying || prefersReducedMotion) return;
+    let raf: number;
+    let last = performance.now();
+    if (scrollYProgress.get() === 0) holdUntilRef.current = last + HOLD_MS;
+
+    const tick = (now: number) => {
+      const dt = Math.min(100, now - last);
+      last = now;
+      if (visibleRef.current && now >= holdUntilRef.current) {
+        let next = scrollYProgress.get() + dt / DURATION_MS;
+        if (next >= 1) {
+          // loop: snap back to the start (no fast reverse playback) and show the hero again
+          smoothProgress.jump(0);
+          next = 0;
+          holdUntilRef.current = now + HOLD_MS;
+        }
+        scrollYProgress.set(next);
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [canStart, isPlaying, prefersReducedMotion, scrollYProgress, smoothProgress]);
 
   // Hero overlay opacity (fades out cleanly before Phase 01 arrives)
   const heroOpacity = useTransform(smoothProgress, [0, 0.05, 0.10], [1, 0.4, 0]);
@@ -143,6 +167,7 @@ export default function FlyingCarScroll() {
 
   // Bottom sequence timeline bar opacity (fades in only AFTER Hero has faded out!)
   const timelineOpacity = useTransform(smoothProgress, [0.06, 0.12], [0, 1]);
+  const timelinePointer = useTransform(timelineOpacity, (v) => (v > 0.5 ? "auto" : "none"));
 
   // Dynamic active phase index based on current frame
   const activePhaseIdx =
@@ -500,14 +525,13 @@ export default function FlyingCarScroll() {
     return () => cancelAnimationFrame(animId);
   }, [renderFrame]);
 
+  // "Explore the experience": skip the hero hold and start the flight right away
   const scrollToSequence = () => {
-    if (containerRef.current) {
-      const top = containerRef.current.offsetTop;
-      const height = containerRef.current.offsetHeight - window.innerHeight;
-      window.scrollTo({
-        top: top + height * 0.65, // Scrolls directly to the majestic flying car cruising scene!
-        behavior: "smooth",
-      });
+    holdUntilRef.current = 0;
+    setIsPlaying(true);
+    if (scrollYProgress.get() < 0.11) {
+      scrollYProgress.set(0.11);
+      smoothProgress.jump(0.11);
     }
   };
 
@@ -520,11 +544,11 @@ export default function FlyingCarScroll() {
     <section
       id="experience"
       ref={containerRef}
-      className="relative h-[220vh] w-full bg-[#050505]"
+      className="relative h-screen min-h-[640px] w-full bg-[#050505]"
     >
-      {/* Sticky Fullscreen Canvas Viewport */}
+      {/* Fullscreen Canvas Viewport (autoplay, no scroll pinning) */}
       <div
-          className="sticky top-0 h-screen min-h-screen w-full overflow-hidden flex items-center justify-center shrink-0 bg-cover bg-center"
+          className="relative h-full w-full overflow-hidden flex items-center justify-center bg-cover bg-center"
           style={{ backgroundImage: "url(/images/aeron/1.webp)", backgroundColor: "#050505" }}
         >
         {/* Full-bleed HTML5 Canvas (edge-to-edge cover with Math.max) */}
@@ -703,6 +727,18 @@ export default function FlyingCarScroll() {
             />
           </div>
         </motion.div>
+
+        {/* Pause / play (autoplaying motion should always be pausable) */}
+        <motion.button
+          type="button"
+          onClick={() => setIsPlaying((v) => !v)}
+          aria-label={isPlaying ? "Pause animation" : "Play animation"}
+          style={{ opacity: timelineOpacity, pointerEvents: timelinePointer }}
+          className="absolute bottom-14 right-4 md:right-14 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 text-[10px] font-mono uppercase tracking-wider text-silver backdrop-blur-md transition-colors"
+        >
+          {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+          <span>{isPlaying ? "Pause" : "Play"}</span>
+        </motion.button>
 
         {/* Accessibility Notice for Reduced Motion */}
         {prefersReducedMotion && (
