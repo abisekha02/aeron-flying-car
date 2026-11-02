@@ -1,14 +1,16 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { motion, useTransform, useSpring, useMotionValue, animate } from "framer-motion";
+import { motion, useTransform, useMotionValue, animate } from "framer-motion";
 import CarTextOverlays from "./CarTextOverlays";
-import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkles, Pause, Play } from "lucide-react";
+import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkles, Pause, Play, RotateCcw } from "lucide-react";
 
 const TOTAL_FRAMES = 40;
 
 // Autoplay timing
 const HOLD_MS = 3000;       // how long the hero (headline + buttons) stays on screen before the flight starts
+const LOOP_ANIMATION = false; // false = fly once and stay on the landed shot (with a Replay button); true = loop forever
+const END_PROGRESS = LOOP_ANIMATION ? 1 : 0.985;
 const DURATION_MS = 16000;  // length of one full flight (progress 0 -> 1), then it loops
 
 interface TelemetryData {
@@ -52,8 +54,8 @@ const FRAME_KEYS: Array<[number, number]> = [
   [0.48, 20],
   [0.58, 26],
   [0.85, 34],
-  [0.875, 35],
-  [0.92, 39],
+  [0.865, 35],
+  [0.90, 39],
 ];
 
 function mapProgressToFrameFloat(progress: number): number {
@@ -98,16 +100,12 @@ export default function FlyingCarScroll() {
   const introFade = useMotionValue(0); // 1 -> 0 black fade-in after each loop restart
   const [isPlaying, setIsPlaying] = useState(true);
   const [canStart, setCanStart] = useState(false);
+  const [hasEnded, setHasEnded] = useState(false);
   const holdUntilRef = useRef<number>(0);
   const visibleRef = useRef<boolean>(true);
 
-  // Spring-smoothed progress for buttery 60/120fps motion across gestures
-  const smoothProgress = useSpring(scrollYProgress, {
-    stiffness: 95,
-    damping: 24,
-    mass: 0.12,
-    restDelta: 0.0001,
-  });
+  // Autoplay is already linear and smooth, so no spring is needed (a spring only added lag).
+  const smoothProgress = scrollYProgress;
 
   // Start once frames are loaded (or after 5s at the latest so a slow network never blocks it)
   useEffect(() => {
@@ -144,13 +142,21 @@ export default function FlyingCarScroll() {
       last = now;
       if (visibleRef.current && now >= holdUntilRef.current) {
         let next = scrollYProgress.get() + dt / DURATION_MS;
-        if (next >= 1) {
-          // loop: snap back to the start (no fast reverse playback) and show the hero again
-          smoothProgress.jump(0);
-          next = 0;
-          holdUntilRef.current = now + HOLD_MS;
-          introFade.set(1);
-          animate(introFade, 0, { duration: 0.9, ease: "easeOut" });
+        if (next >= END_PROGRESS) {
+          if (LOOP_ANIMATION) {
+            // loop: snap back to the start (no fast reverse playback) and show the hero again
+            smoothProgress.jump(0);
+            next = 0;
+            holdUntilRef.current = now + HOLD_MS;
+            introFade.set(1);
+            animate(introFade, 0, { duration: 0.9, ease: "easeOut" });
+          } else {
+            // play once: stop on the landed shot
+            scrollYProgress.set(END_PROGRESS);
+            setIsPlaying(false);
+            setHasEnded(true);
+            return;
+          }
         }
         scrollYProgress.set(next);
       }
@@ -161,7 +167,7 @@ export default function FlyingCarScroll() {
   }, [canStart, isPlaying, prefersReducedMotion, scrollYProgress, smoothProgress, introFade]);
 
   // Smooth end-of-loop: fade to black, cut back to the hero, fade up from black
-  const endFade = useTransform(smoothProgress, [0.965, 0.995], [0, 1]);
+  const endFade = useTransform(smoothProgress, [0.965, 0.995], [0, LOOP_ANIMATION ? 1 : 0]);
   const blackoutOpacity = useTransform([endFade, introFade], ([a, b]) =>
     Math.max(a as number, b as number)
   );
@@ -435,6 +441,14 @@ export default function FlyingCarScroll() {
         if (isCancelled) return;
         loaded++;
         setLoadedCount(loaded);
+        // Force the browser to decode this frame now (not at the moment it is first shown)
+        try {
+          img.decode?.().catch(() => {});
+          const warm = document.createElement("canvas");
+          warm.width = 1;
+          warm.height = 1;
+          warm.getContext("2d")?.drawImage(img, 0, 0, 1, 1);
+        } catch {}
         if (i - 1 === currentFrameRef.current || loaded === 1) {
           renderFrame(currentFrameRef.current, performance.now());
         }
@@ -773,13 +787,25 @@ export default function FlyingCarScroll() {
         {/* Pause / play (autoplaying motion should always be pausable) */}
         <motion.button
           type="button"
-          onClick={() => setIsPlaying((v) => !v)}
-          aria-label={isPlaying ? "Pause animation" : "Play animation"}
+          onClick={() => {
+            if (hasEnded) {
+              // Replay: restart the flight directly (skip the hero)
+              setHasEnded(false);
+              holdUntilRef.current = 0;
+              lastFrameRef.current = -1;
+              smoothProgress.jump(0.11);
+              scrollYProgress.set(0.11);
+              setIsPlaying(true);
+            } else {
+              setIsPlaying((v) => !v);
+            }
+          }}
+          aria-label={hasEnded ? "Replay animation" : isPlaying ? "Pause animation" : "Play animation"}
           style={{ opacity: timelineOpacity, pointerEvents: timelinePointer }}
           className="absolute bottom-14 right-4 md:right-14 z-30 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/60 hover:bg-black/80 border border-white/15 text-[10px] font-mono uppercase tracking-wider text-silver backdrop-blur-md transition-colors"
         >
-          {isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-          <span>{isPlaying ? "Pause" : "Play"}</span>
+          {hasEnded ? <RotateCcw className="w-3 h-3" /> : isPlaying ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+          <span>{hasEnded ? "Replay" : isPlaying ? "Pause" : "Play"}</span>
         </motion.button>
 
         {/* Accessibility Notice for Reduced Motion */}
