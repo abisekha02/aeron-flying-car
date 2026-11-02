@@ -8,8 +8,8 @@ import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkl
 const TOTAL_FRAMES = 40;
 
 // Autoplay timing
-const HOLD_MS = 4500;       // how long the hero (headline + buttons) stays on screen before the flight starts
-const DURATION_MS = 32000;  // length of one full flight (progress 0 -> 1), then it loops
+const HOLD_MS = 3000;       // how long the hero (headline + buttons) stays on screen before the flight starts
+const DURATION_MS = 16000;  // length of one full flight (progress 0 -> 1), then it loops
 
 interface TelemetryData {
   speed: number;
@@ -30,49 +30,40 @@ const PHASES_TIMELINE = [
 ];
 
 /**
- * Maps scroll progress (0..1) to frame index (0..39) with optimized pacing:
- * - 0.00 -> 0.10 : Hero screen (Frame 0)
- * - 0.10 -> 0.22 : Runway acceleration (Frames 0 -> 5)
- * - 0.22 -> 0.36 : Curved ramp ascent (Frames 6 -> 13)
- * - 0.36 -> 0.48 : Inverted 0-G loop (Frames 14 -> 19)
- * - 0.48 -> 0.58 : Takeoff ramp departure & flip upright into flight (Frames 20 -> 25)
- *                  -> By 0.58 (1-2 scroll gestures), transformation is 100% complete!
- * - 0.58 -> 0.86 : Sustained cruising flight with glowing thrusters (Frames 26 -> 34)
- *                  -> Held across 28% of the scroll for dedicated appreciation!
- * - 0.86 -> 0.96 : Touchdown descent & landing (Frames 35 -> 39)
- * - 0.96 -> 1.00 : Smooth handover to Engineering
+ * Maps autoplay progress (0..1) to a FRACTIONAL frame position (0..39).
+ * The integer part is the frame, the fraction is how far we are toward the next one,
+ * which lets us cross-dissolve between neighbouring frames for smooth motion.
+ *
+ *  0.00 -> 0.10 : Hero (frame 0)
+ *  0.10 -> 0.22 : Runway acceleration   (frames 0  -> 6)
+ *  0.22 -> 0.36 : Curved ramp ascent    (frames 6  -> 14)
+ *  0.36 -> 0.48 : Inverted 0-G arc      (frames 14 -> 20)
+ *  0.48 -> 0.58 : Takeoff & flip upright(frames 20 -> 26)
+ *  0.58 -> 0.86 : Sustained cruise      (frames 26 -> 35)
+ *  0.86 -> 0.97 : Descent & landing     (frames 35 -> 39)
+ *  0.97 -> 1.00 : Hold on last frame
  */
-function mapProgressToFrame(progress: number): number {
-  const p = Math.min(1, Math.max(0, progress));
+const FRAME_KEYS: Array<[number, number]> = [
+  [0.10, 0],
+  [0.22, 6],
+  [0.36, 14],
+  [0.48, 20],
+  [0.58, 26],
+  [0.86, 35],
+  [0.97, 39],
+];
 
-  if (p <= 0.10) {
-    // 0.00 -> 0.10 : Hero idle on runway
-    return 0;
-  } else if (p <= 0.22) {
-    // 0.10 -> 0.22 : Runway acceleration
-    const t = (p - 0.10) / 0.12;
-    return Math.min(5, Math.floor(t * 6));
-  } else if (p <= 0.36) {
-    // 0.22 -> 0.36 : Ramp ascent
-    const t = (p - 0.22) / 0.14;
-    return Math.min(13, 6 + Math.floor(t * 8));
-  } else if (p <= 0.48) {
-    // 0.36 -> 0.48 : Inverted arc
-    const t = (p - 0.36) / 0.12;
-    return Math.min(19, 14 + Math.floor(t * 6));
-  } else if (p <= 0.58) {
-    // 0.48 -> 0.58 : Takeoff & flip upright
-    const t = (p - 0.48) / 0.10;
-    return Math.min(25, 20 + Math.floor(t * 6));
-  } else if (p <= 0.86) {
-    // 0.58 -> 0.86 : Full flight with thrusters (sustained cruise plateau)
-    const t = (p - 0.58) / 0.28;
-    return Math.min(34, 26 + Math.floor(t * 9));
-  } else {
-    // 0.86 -> 1.00 : Descent & runway touchdown
-    const t = Math.min(1, (p - 0.86) / 0.11);
-    return Math.min(39, 35 + Math.floor(t * 5));
+function mapProgressToFrameFloat(progress: number): number {
+  const p = Math.min(1, Math.max(0, progress));
+  if (p <= FRAME_KEYS[0][0]) return FRAME_KEYS[0][1];
+  for (let i = 1; i < FRAME_KEYS.length; i++) {
+    const [p1, f1] = FRAME_KEYS[i];
+    if (p <= p1) {
+      const [p0, f0] = FRAME_KEYS[i - 1];
+      return f0 + ((p - p0) / (p1 - p0)) * (f1 - f0);
+    }
   }
+  return TOTAL_FRAMES - 1;
 }
 
 export default function FlyingCarScroll() {
@@ -80,6 +71,8 @@ export default function FlyingCarScroll() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imagesRef = useRef<HTMLImageElement[]>([]);
   const currentFrameRef = useRef<number>(0);
+  const blendRef = useRef<number>(0); // 0..1 cross-dissolve toward the next frame
+  const lastFrameRef = useRef<number>(-1);
   const animFrameIdRef = useRef<number | null>(null);
 
   const [loadedCount, setLoadedCount] = useState(0);
@@ -346,6 +339,9 @@ export default function FlyingCarScroll() {
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+
         ctx.drawImage(
           img,
           0,
@@ -357,6 +353,25 @@ export default function FlyingCarScroll() {
           drawWidth,
           drawHeight
         );
+
+        // Cross-dissolve into the next frame so motion looks continuous instead of stepping
+        const blend = blendRef.current;
+        const nextImg = imagesRef.current[frameIndex + 1];
+        if (blend > 0.01 && nextImg && nextImg.complete && nextImg.naturalWidth > 0) {
+          ctx.globalAlpha = blend;
+          ctx.drawImage(
+            nextImg,
+            0,
+            0,
+            nextImg.naturalWidth,
+            nextImg.naturalHeight,
+            centerShiftX,
+            centerShiftY,
+            drawWidth,
+            drawHeight
+          );
+          ctx.globalAlpha = 1;
+        }
       } else {
         drawProceduralFallback(
           ctx,
@@ -449,8 +464,17 @@ export default function FlyingCarScroll() {
   // Continuously synchronize smooth spring progress with frame rendering & telemetry
   useEffect(() => {
     const unsubscribe = smoothProgress.on("change", (latest) => {
-      const frameIndex = mapProgressToFrame(latest);
+      const f = mapProgressToFrameFloat(latest);
+      const frameIndex = Math.min(TOTAL_FRAMES - 1, Math.floor(f));
+      blendRef.current = frameIndex >= TOTAL_FRAMES - 1 ? 0 : f - frameIndex;
       currentFrameRef.current = frameIndex;
+
+      // Cheap path: same frame as before -> just repaint the canvas (no React re-render)
+      if (frameIndex === lastFrameRef.current) {
+        renderFrame(frameIndex, performance.now());
+        return;
+      }
+      lastFrameRef.current = frameIndex;
       setActiveFrame(frameIndex);
 
       let speed = 0;
