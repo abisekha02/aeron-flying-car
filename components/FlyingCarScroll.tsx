@@ -158,7 +158,13 @@ export default function FlyingCarScroll() {
             return;
           }
         }
-        scrollYProgress.set(next);
+        // Safety net: if any listener (canvas draw, HUD update...) throws, log it but keep the
+        // animation running instead of letting one error freeze autoplay for good.
+        try {
+          scrollYProgress.set(next);
+        } catch (err) {
+          console.error("[AERON] frame update failed (autoplay continues):", err);
+        }
       }
       raf = requestAnimationFrame(tick);
     };
