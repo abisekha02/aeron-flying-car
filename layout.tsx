@@ -37,7 +37,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`dark ${outfit.variable}`}>
-      <body className="min-h-screen bg-background text-silver font-sans antialiased selection:bg-neonRed selection:text-white overflow-x-clip">
+      <body className="min-h-screen bg-background text-silver font-sans antialiased selection:bg-neonRed selection:text-white">
         {children}
       </body>
     </html>
