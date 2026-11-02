@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { motion, useTransform, useSpring, useMotionValue } from "framer-motion";
+import { motion, useTransform, useSpring, useMotionValue, animate } from "framer-motion";
 import CarTextOverlays from "./CarTextOverlays";
 import { ChevronDown, Gauge, Plane, Radio, ShieldCheck, Zap, AlertCircle, Sparkles, Pause, Play } from "lucide-react";
 
@@ -39,9 +39,11 @@ const PHASES_TIMELINE = [
  *  0.22 -> 0.36 : Curved ramp ascent    (frames 6  -> 14)
  *  0.36 -> 0.48 : Inverted 0-G arc      (frames 14 -> 20)
  *  0.48 -> 0.58 : Takeoff & flip upright(frames 20 -> 26)
- *  0.58 -> 0.86 : Sustained cruise      (frames 26 -> 35)
- *  0.86 -> 0.97 : Descent & landing     (frames 35 -> 39)
- *  0.97 -> 1.00 : Hold on last frame
+ *  0.58 -> 0.85 : Sustained cruise      (frames 26 -> 34)
+ *  0.85 -> 0.875: Quick dissolve at the scene cut (frame 34 -> 35); the flying shot and the
+ *                 landed shot are very different pictures, so this must be short
+ *  0.875-> 0.92 : Settle onto the pad   (frames 35 -> 39)
+ *  0.92 -> 1.00 : Hold the landed shot, then fade to black and loop
  */
 const FRAME_KEYS: Array<[number, number]> = [
   [0.10, 0],
@@ -49,8 +51,9 @@ const FRAME_KEYS: Array<[number, number]> = [
   [0.36, 14],
   [0.48, 20],
   [0.58, 26],
-  [0.86, 35],
-  [0.97, 39],
+  [0.85, 34],
+  [0.875, 35],
+  [0.92, 39],
 ];
 
 function mapProgressToFrameFloat(progress: number): number {
@@ -92,6 +95,7 @@ export default function FlyingCarScroll() {
 
   // Autoplay progress (0..1). Nothing depends on page scrolling any more.
   const scrollYProgress = useMotionValue(0);
+  const introFade = useMotionValue(0); // 1 -> 0 black fade-in after each loop restart
   const [isPlaying, setIsPlaying] = useState(true);
   const [canStart, setCanStart] = useState(false);
   const holdUntilRef = useRef<number>(0);
@@ -145,6 +149,8 @@ export default function FlyingCarScroll() {
           smoothProgress.jump(0);
           next = 0;
           holdUntilRef.current = now + HOLD_MS;
+          introFade.set(1);
+          animate(introFade, 0, { duration: 0.9, ease: "easeOut" });
         }
         scrollYProgress.set(next);
       }
@@ -152,7 +158,13 @@ export default function FlyingCarScroll() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [canStart, isPlaying, prefersReducedMotion, scrollYProgress, smoothProgress]);
+  }, [canStart, isPlaying, prefersReducedMotion, scrollYProgress, smoothProgress, introFade]);
+
+  // Smooth end-of-loop: fade to black, cut back to the hero, fade up from black
+  const endFade = useTransform(smoothProgress, [0.965, 0.995], [0, 1]);
+  const blackoutOpacity = useTransform([endFade, introFade], ([a, b]) =>
+    Math.max(a as number, b as number)
+  );
 
   // Hero overlay opacity (fades out cleanly before Phase 01 arrives)
   const heroOpacity = useTransform(smoothProgress, [0, 0.05, 0.10], [1, 0.4, 0]);
@@ -579,6 +591,12 @@ export default function FlyingCarScroll() {
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full pointer-events-none select-none z-0"
+        />
+
+        {/* Black fade used at the end of each loop (no hard jump back to the start) */}
+        <motion.div
+          style={{ opacity: blackoutOpacity }}
+          className="absolute inset-0 bg-[#050505] pointer-events-none z-10"
         />
 
         {/* Ambient Glow Atmosphere Behind Canvas */}
