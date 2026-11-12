@@ -1,9 +1,38 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { TECHNOLOGY_PILLARS, TechnologyPillar } from "../data/vehicle";
 import { Wind, Cpu, ShieldCheck, Eye, ArrowRight, Gauge, Layers, Sparkles } from "lucide-react";
+
+/** Map pillar id → real image stored in public/images/engineering/ */
+const PILLAR_IMAGES: Record<string, { src: string; alt: string; caption: string; sub: string }> = {
+  aero: {
+    src: "/images/engineering/aero-profile.webp",
+    alt: "AERON flying car climbing the red launch ramp, showcasing active aerodynamic morphing surfaces",
+    caption: "Active Morphing Profile",
+    sub: "Zero parasitic drag in transition",
+  },
+  propulsion: {
+    src: "/images/engineering/propulsion-fan.webp",
+    alt: "AERON airborne in cruise with ion-blue thruster plumes illuminated — omni-vector ducted fan array",
+    caption: "Omni-Vector Ducted Fan",
+    sub: "3-Axis Instantaneous Torque",
+  },
+  "flight-control": {
+    src: "/images/engineering/flight-control.webp",
+    alt: "AERON cruising at altitude, flight control envelope engaged — tri-core optical fly-by-wire active",
+    caption: "Tri-Core Optical Fly-by-Wire",
+    sub: "Pulsed LiDAR predictive corridor radar",
+  },
+  cabin: {
+    src: "/images/engineering/cabin-canopy.webp",
+    alt: "AERON on approach to landing — pressurized electrochromic panoramic canopy sanctuary",
+    caption: "Pressurized Electrochromic Sanctuary",
+    sub: "270° Panoramic Field of View",
+  },
+};
 
 const PILLAR_ICONS: Record<string, React.ElementType> = {
   aero: Wind,
@@ -143,99 +172,46 @@ export default function FlightTechnology() {
                 </div>
               </div>
 
-              {/* Right Column: High-tech Visual Schematic Graphic */}
-              <div className="lg:col-span-5 relative flex items-center justify-center p-8 rounded-2xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/10 overflow-hidden min-h-[360px]">
+              {/* Right Column: Real car image for this pillar */}
+              <div className="lg:col-span-5 relative flex items-center justify-center rounded-2xl bg-gradient-to-b from-white/[0.04] to-transparent border border-white/10 overflow-hidden min-h-[360px]">
                 {/* Glowing radial backdrop */}
-                <div className="absolute inset-0 bg-radial-glow from-neonRed/10 via-electricBlue/5 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at center, rgba(255,38,56,0.08) 0%, rgba(86,200,255,0.05) 50%, transparent 70%)" }} />
 
-                {/* Contextual Technical SVG Graphic */}
-                {activePillar.id === "aero" && (
-                  <div className="w-full flex flex-col items-center justify-center space-y-6">
-                    <svg viewBox="0 0 300 180" className="w-full max-w-[280px] drop-shadow-[0_0_20px_rgba(86,200,255,0.4)]">
-                      {/* Morphing Aerodynamic Airfoil */}
-                      <path
-                        d="M 20 100 Q 110 30 260 95 Q 160 125 20 100"
-                        fill="none"
-                        stroke="#DCE1E8"
-                        strokeWidth="3"
-                      />
-                      {/* Trailing edge actuator */}
-                      <path d="M 260 95 L 290 85" stroke="#FF2638" strokeWidth="3" strokeDasharray="4 2" />
-                      {/* Flow stream lines */}
-                      <path d="M 10 50 Q 120 15 290 65" stroke="#56C8FF" strokeWidth="1.5" strokeOpacity="0.7" />
-                      <path d="M 10 75 Q 120 40 290 80" stroke="#56C8FF" strokeWidth="1.5" strokeOpacity="0.9" />
-                      <path d="M 10 135 Q 140 135 290 120" stroke="#56C8FF" strokeWidth="1.5" strokeOpacity="0.5" />
-                    </svg>
-                    <div className="text-center">
-                      <p className="text-xs font-mono uppercase tracking-[0.2em] text-white font-semibold">Active Morphing Profile</p>
-                      <p className="text-[11px] text-neutral-400">Zero parasitic drag in transition</p>
-                    </div>
-                  </div>
-                )}
-
-                {activePillar.id === "propulsion" && (
-                  <div className="w-full flex flex-col items-center justify-center space-y-6">
-                    <div className="relative w-44 h-44 flex items-center justify-center">
-                      {/* Concentric vectoring rings */}
-                      <div className="absolute inset-0 rounded-full border border-electricBlue/30 animate-spin" style={{ animationDuration: "12s" }} />
-                      <div className="absolute inset-3 rounded-full border border-white/20 border-dashed animate-spin" style={{ animationDuration: "8s", animationDirection: "reverse" }} />
-                      <div className="absolute inset-8 rounded-full bg-electricBlue/10 border border-electricBlue shadow-[0_0_30px_rgba(86,200,255,0.6)] flex items-center justify-center">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-r from-neonRed to-electricBlue animate-pulse flex items-center justify-center text-white text-xs font-mono font-bold">
-                          ION-X
+                {(() => {
+                  const imgData = PILLAR_IMAGES[activePillar.id];
+                  return imgData ? (
+                    <div className="w-full flex flex-col items-center justify-center space-y-4 p-4">
+                      <div className="relative w-full overflow-hidden rounded-xl" style={{ aspectRatio: "16/9" }}>
+                        <Image
+                          src={imgData.src}
+                          alt={imgData.alt}
+                          fill
+                          unoptimized
+                          className="object-cover transition-transform duration-700 hover:scale-105"
+                          sizes="(max-width: 1024px) 100vw, 40vw"
+                          onError={(e) => {
+                            // Graceful fallback: hide image, show pill
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                        {/* Subtle cinematic overlay */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent pointer-events-none rounded-xl" />
+                        {/* Phase badge */}
+                        <div className="absolute bottom-3 left-3 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[9px] font-mono text-electricBlue uppercase tracking-widest">
+                          AERON // {imgData.caption}
                         </div>
                       </div>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-xs font-mono uppercase tracking-[0.2em] text-white font-semibold">Omni-Vector Ducted Fan</p>
-                      <p className="text-[11px] text-neutral-400">3-Axis Instantaneous Torque</p>
-                    </div>
-                  </div>
-                )}
-
-                {activePillar.id === "flight-control" && (
-                  <div className="w-full flex flex-col items-center justify-center space-y-6">
-                    <div className="relative w-48 h-36 border border-white/20 rounded-xl p-4 bg-black/40 font-mono text-[10px] space-y-2">
-                      <div className="flex justify-between text-neonRed border-b border-white/10 pb-1">
-                        <span>LIDAR 360 // PULSED</span>
-                        <span className="animate-pulse">ACTIVE</span>
-                      </div>
-                      <div className="text-neutral-400 space-y-1">
-                        <p>&gt; YAW STABILITY: 99.98%</p>
-                        <p>&gt; PITCH TRIM: AUTO-LOCK</p>
-                        <p>&gt; SKYWAY TRAFFIC: NOMINAL</p>
-                        <p className="text-electricBlue">&gt; TCAS-X: 0 CONFLICTS</p>
-                      </div>
-                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                        <div className="w-4/5 h-full bg-neonRed" />
+                      <div className="text-center">
+                        <p className="text-xs font-mono uppercase tracking-[0.2em] text-white font-semibold">{imgData.caption}</p>
+                        <p className="text-[11px] text-neutral-400">{imgData.sub}</p>
                       </div>
                     </div>
-                    <div className="text-center">
-                      <p className="text-xs font-mono uppercase tracking-[0.2em] text-white font-semibold">Tri-Core Optical Fly-by-Wire</p>
-                      <p className="text-[11px] text-neutral-400">Pulsed LiDAR predictive corridor radar</p>
+                  ) : (
+                    <div className="text-neutral-500 text-xs font-mono p-8 text-center">
+                      Visual unavailable
                     </div>
-                  </div>
-                )}
-
-                {activePillar.id === "cabin" && (
-                  <div className="w-full flex flex-col items-center justify-center space-y-6">
-                    <svg viewBox="0 0 240 140" className="w-full max-w-[240px]">
-                      {/* Electrochromic canopy arc */}
-                      <path
-                        d="M 30 110 C 50 30, 190 30, 210 110"
-                        fill="rgba(86, 200, 255, 0.1)"
-                        stroke="#56C8FF"
-                        strokeWidth="2.5"
-                      />
-                      <line x1="30" y1="110" x2="210" y2="110" stroke="#FFFFFF" strokeWidth="1.5" strokeOpacity="0.4" />
-                      <circle cx="95" cy="85" r="14" fill="#DCE1E8" fillOpacity="0.8" />
-                      <circle cx="145" cy="85" r="14" fill="#DCE1E8" fillOpacity="0.8" />
-                    </svg>
-                    <div className="text-center">
-                      <p className="text-xs font-mono uppercase tracking-[0.2em] text-white font-semibold">Pressurized Electrochromic Sanctuary</p>
-                      <p className="text-[11px] text-neutral-400">270° Panoramic Field of View</p>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </motion.div>
           </AnimatePresence>

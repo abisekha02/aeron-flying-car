@@ -464,10 +464,6 @@ export default function FlyingCarScroll() {
       };
 
       img.onerror = () => {
-        if (!img.dataset.triedJpg) {
-          img.dataset.triedJpg = "true";
-          img.src = `/images/aeron/${i}.jpg`;
-        } else {
           if (isCancelled) return;
           loaded++;
           setLoadedCount(loaded);
@@ -475,7 +471,6 @@ export default function FlyingCarScroll() {
           if (loaded >= TOTAL_FRAMES) {
             setIsLoaded(true);
           }
-        }
       };
 
       images.push(img);

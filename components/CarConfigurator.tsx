@@ -1,6 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   COLOR_OPTIONS,
   INTERIOR_OPTIONS,
@@ -11,12 +13,30 @@ import {
 } from "../data/vehicle";
 import { Check, RotateCcw, Palette, Layers, Sparkles, Bookmark, Share2 } from "lucide-react";
 
+/**
+ * Maps color id → authentic full-fidelity vehicle renders provided for each paint finish.
+ */
+const COLOR_IMAGES: Record<string, string> = {
+  silver: "/images/configurator/silver.png",
+  obsidian: "/images/configurator/obsidian.png",
+  crimson: "/images/configurator/crimson.png",
+  white: "/images/configurator/white.png",
+};
+
 export default function CarConfigurator() {
   const [selectedColor, setSelectedColor] = useState<ColorOption>(COLOR_OPTIONS[0]);
   const [selectedInterior, setSelectedInterior] = useState<InteriorOption>(INTERIOR_OPTIONS[0]);
   const [selectedAero, setSelectedAero] = useState<AeroPackage>(AERO_PACKAGES[0]);
   const [lightingMode, setLightingMode] = useState<"red" | "blue">("blue");
   const [savedNotification, setSavedNotification] = useState(false);
+
+  // Preload all real car color renders for zero-latency instant transitions
+  useEffect(() => {
+    Object.values(COLOR_IMAGES).forEach((src) => {
+      const img = new window.Image();
+      img.src = src;
+    });
+  }, []);
 
   const resetConfig = () => {
     setSelectedColor(COLOR_OPTIONS[0]);
@@ -100,117 +120,83 @@ export default function CarConfigurator() {
               </div>
             </div>
 
-            {/* Dynamic Vector Chassis Profile Visualizer */}
-            <div className="my-10 flex items-center justify-center relative">
-              <svg
-                viewBox="0 0 600 240"
-                className="w-full max-w-[540px] drop-shadow-[0_20px_40px_rgba(0,0,0,0.8)] transition-all duration-500"
+            {/* Real Car Image Visualizer — dynamically swapped based on selected color */}
+            <div className="my-6 flex flex-col items-center justify-center relative">
+              <div
+                className="relative w-full overflow-hidden rounded-2xl bg-black/60 shadow-[0_20px_50px_rgba(0,0,0,0.9)] border border-white/5"
+                style={{ aspectRatio: "16/9" }}
               >
-                <defs>
-                  {/* Dynamic body gradient based on selected color */}
-                  <linearGradient id="bodyGradient" x1="0%" y1="0%" x2="100%" y2="50%">
-                    <stop offset="0%" stopColor={selectedColor.secondaryHex} />
-                    <stop offset="40%" stopColor={selectedColor.hex} />
-                    <stop offset="85%" stopColor={selectedColor.secondaryHex} />
-                  </linearGradient>
-
-                  {/* Thruster lighting gradient */}
-                  <radialGradient id="thrusterPlume" cx="50%" cy="50%" r="50%">
-                    <stop
-                      offset="0%"
-                      stopColor={lightingMode === "blue" ? "#FFFFFF" : "#FFFFFF"}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={selectedColor.id}
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 1.01 }}
+                    transition={{ duration: 0.35, ease: "easeInOut" }}
+                    className="absolute inset-0 w-full h-full"
+                  >
+                    <Image
+                      src={COLOR_IMAGES[selectedColor.id] ?? "/images/configurator/silver.png"}
+                      alt={`AERON flying car in ${selectedColor.name} finish — ${selectedColor.finish}`}
+                      fill
+                      priority
+                      unoptimized
+                      className="object-cover object-center"
+                      sizes="(max-width: 1024px) 100vw, 56vw"
                     />
-                    <stop
-                      offset="40%"
-                      stopColor={lightingMode === "blue" ? "#56C8FF" : "#FF2638"}
-                      stopOpacity="0.8"
-                    />
-                    <stop
-                      offset="100%"
-                      stopColor={lightingMode === "blue" ? "#0055FF" : "#8B0000"}
-                      stopOpacity="0"
-                    />
-                  </radialGradient>
-                </defs>
+                  </motion.div>
+                </AnimatePresence>
 
-                {/* Ground reflection shadow */}
-                <ellipse cx="300" cy="210" rx="240" ry="14" fill="#020202" fillOpacity="0.8" />
+                {/* Lighting-mode accent reflections onto the landing stage */}
+                <div
+                  className="absolute inset-0 pointer-events-none transition-all duration-700 rounded-2xl"
+                  style={{
+                    background:
+                      lightingMode === "blue"
+                        ? "radial-gradient(circle at 50% 90%, rgba(86,200,255,0.15) 0%, transparent 60%)"
+                        : "radial-gradient(circle at 50% 90%, rgba(255,38,56,0.18) 0%, transparent 60%)",
+                  }}
+                />
 
-                {/* Rear Thruster Plumes */}
-                <ellipse cx="70" cy="145" rx="35" ry="12" fill="url(#thrusterPlume)" />
-                <ellipse cx="70" cy="165" rx="35" ry="12" fill="url(#thrusterPlume)" />
-
-                {/* Aero Winglet (changes with aero package) */}
-                {selectedAero.id === "apex-track" ? (
-                  <path
-                    d="M 50 120 L 120 100 L 140 105 L 70 135 Z"
-                    fill="#15171C"
-                    stroke="#FF2638"
-                    strokeWidth="1.5"
-                  />
-                ) : (
-                  <path
-                    d="M 65 128 L 115 115 L 125 118 L 80 135 Z"
-                    fill="#15171C"
-                    stroke="rgba(255,255,255,0.2)"
-                    strokeWidth="1"
-                  />
+                {/* Aero pack dynamic badge */}
+                {selectedAero.id === "apex-track" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="absolute top-4 left-4 px-3 py-1.5 rounded-full bg-neonRed/90 backdrop-blur-md text-[10px] font-mono text-white uppercase tracking-widest flex items-center gap-1.5 shadow-[0_0_15px_rgba(255,38,56,0.5)]"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    <span>APEX TRACK PACKAGE // ACTIVE</span>
+                  </motion.div>
                 )}
 
-                {/* Main Flying Car Body Shell */}
-                <path
-                  d="M 80 155 
-                     Q 110 135 180 125 
-                     Q 260 85 360 85 
-                     Q 450 90 520 145 
-                     Q 540 160 510 170 
-                     Q 440 178 300 175 
-                     Q 150 175 80 165 Z"
-                  fill="url(#bodyGradient)"
-                  stroke="rgba(255,255,255,0.2)"
-                  strokeWidth="1.5"
-                  className="transition-all duration-700"
-                />
-
-                {/* Seamless Black Glass Canopy */}
-                <path
-                  d="M 230 120 
-                     Q 290 88 375 88 
-                     Q 435 90 470 135 
-                     Q 360 125 230 120 Z"
-                  fill="#08090C"
-                  fillOpacity="0.92"
-                  stroke="rgba(255,255,255,0.3)"
-                  strokeWidth="1"
-                />
-
-                {/* Interior Seat Silhouette highlight */}
-                <circle cx="320" cy="112" r="9" fill={selectedInterior.id === "crimson-apex" ? "#FF2638" : selectedInterior.id === "cyber-blue" ? "#56C8FF" : "#8E97A4"} fillOpacity="0.6" />
-                <circle cx="370" cy="112" r="9" fill={selectedInterior.id === "crimson-apex" ? "#FF2638" : selectedInterior.id === "cyber-blue" ? "#56C8FF" : "#8E97A4"} fillOpacity="0.6" />
-
-                {/* Front LED Blade Lightbar */}
-                <path
-                  d="M 480 148 L 525 158"
-                  stroke={lightingMode === "blue" ? "#56C8FF" : "#FF2638"}
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  className="transition-colors duration-300"
-                />
-
-                {/* Lower Skirt Aero Diffuser */}
-                <path
-                  d="M 120 170 L 480 170 L 470 176 L 130 176 Z"
-                  fill="#0D0E12"
-                  stroke="rgba(255,255,255,0.1)"
-                  strokeWidth="1"
-                />
-              </svg>
+                {/* Bottom glassmorphic status overlay */}
+                <div className="absolute inset-x-0 bottom-0 p-4 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none flex items-end justify-between">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="w-3 h-3 rounded-full border border-white/40 shadow-sm"
+                      style={{ backgroundColor: selectedColor.hex }}
+                    />
+                    <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">
+                      {selectedColor.name}
+                    </span>
+                  </div>
+                  <div className="text-[10px] font-mono text-silver/80 uppercase tracking-widest bg-black/50 px-2.5 py-1 rounded-md backdrop-blur-sm border border-white/10">
+                    {selectedColor.finish}
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Note clarifying dynamic vector rendering */}
+            {/* Footer note */}
             <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 border-t border-white/10 pt-4">
-              <span>REAL-TIME DYNAMIC VECTOR SCHEMATIC</span>
-              <span className="text-electricBlue">ACTIVE COLOR PALETTE: {selectedColor.name}</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-electricBlue animate-pulse" />
+                REAL-TIME VEHICLE SPECIFICATION
+              </span>
+              <span className="text-electricBlue">
+                {selectedColor.name.toUpperCase()} // {lightingMode.toUpperCase()} THRUSTERS
+              </span>
             </div>
           </div>
 
