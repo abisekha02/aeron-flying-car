@@ -3,15 +3,18 @@
 import React from "react";
 import { ArrowUp, Compass, Github, ShieldAlert, Sparkles } from "lucide-react";
 import { AERON_CONCEPT_METADATA } from "../data/vehicle";
+import { sound } from "../utils/audio";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   const scrollToTop = () => {
+    sound.playClick();
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const scrollToConfigurator = () => {
+    sound.playClick();
     const el = document.getElementById("configurator");
     if (el) el.scrollIntoView({ behavior: "smooth" });
   };

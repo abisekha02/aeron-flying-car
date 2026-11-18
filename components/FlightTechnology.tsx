@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { TECHNOLOGY_PILLARS, TechnologyPillar } from "../data/vehicle";
 import { Wind, Cpu, ShieldCheck, Eye, ArrowRight, Gauge, Layers, Sparkles } from "lucide-react";
+import { sound } from "../utils/audio";
 
 /** Map pillar id → real image stored in public/images/engineering/ */
 const PILLAR_IMAGES: Record<string, { src: string; alt: string; caption: string; sub: string }> = {
@@ -83,7 +84,10 @@ export default function FlightTechnology() {
             return (
               <button
                 key={pillar.id}
-                onClick={() => setActivePillarId(pillar.id)}
+                onClick={() => {
+                  sound.playClick();
+                  setActivePillarId(pillar.id);
+                }}
                 className={`group text-left p-5 rounded-2xl transition-all duration-300 relative border ${
                   isActive
                     ? "bg-[#111317] border-neonRed/60 shadow-[0_10px_30px_rgba(255,38,56,0.15)]"

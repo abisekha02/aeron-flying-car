@@ -11,7 +11,9 @@ import {
   InteriorOption,
   AeroPackage,
 } from "../data/vehicle";
-import { Check, RotateCcw, Palette, Layers, Sparkles, Bookmark, Share2 } from "lucide-react";
+import { Check, RotateCcw, Palette, Layers, Sparkles, Bookmark, Share2, ArrowRight } from "lucide-react";
+import { sound } from "../utils/audio";
+import ReserveModal from "./ReserveModal";
 
 /**
  * Maps color id → authentic full-fidelity vehicle renders provided for each paint finish.
@@ -29,6 +31,13 @@ export default function CarConfigurator() {
   const [selectedAero, setSelectedAero] = useState<AeroPackage>(AERO_PACKAGES[0]);
   const [lightingMode, setLightingMode] = useState<"red" | "blue">("blue");
   const [savedNotification, setSavedNotification] = useState(false);
+  const [reserveModalOpen, setReserveModalOpen] = useState(false);
+
+  // Calculate live concept build price
+  const basePrice = 1150000;
+  const aeroAdd = selectedAero.id === "apex-track" ? 145000 : 0;
+  const interiorAdd = selectedInterior.id === "crimson-apex" ? 35000 : selectedInterior.id === "cyber-blue" ? 28000 : 0;
+  const totalPrice = basePrice + aeroAdd + interiorAdd;
 
   // Preload all real car color renders for zero-latency instant transitions
   useEffect(() => {
@@ -39,6 +48,7 @@ export default function CarConfigurator() {
   }, []);
 
   const resetConfig = () => {
+    sound.playClick();
     setSelectedColor(COLOR_OPTIONS[0]);
     setSelectedInterior(INTERIOR_OPTIONS[0]);
     setSelectedAero(AERO_PACKAGES[0]);
@@ -46,6 +56,7 @@ export default function CarConfigurator() {
   };
 
   const handleSave = () => {
+    sound.playChime(650, "sine", 0.2);
     setSavedNotification(true);
     setTimeout(() => setSavedNotification(false), 3000);
   };
@@ -98,7 +109,10 @@ export default function CarConfigurator() {
 
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setLightingMode("blue")}
+                  onClick={() => {
+                    sound.playClick();
+                    setLightingMode("blue");
+                  }}
                   className={`px-2.5 py-1 rounded text-[10px] uppercase font-mono transition-all ${
                     lightingMode === "blue"
                       ? "bg-electricBlue/20 text-electricBlue border border-electricBlue/40"
@@ -108,7 +122,10 @@ export default function CarConfigurator() {
                   Ion Blue
                 </button>
                 <button
-                  onClick={() => setLightingMode("red")}
+                  onClick={() => {
+                    sound.playClick();
+                    setLightingMode("red");
+                  }}
                   className={`px-2.5 py-1 rounded text-[10px] uppercase font-mono transition-all ${
                     lightingMode === "red"
                       ? "bg-neonRed/20 text-neonRed border border-neonRed/40"
@@ -215,7 +232,10 @@ export default function CarConfigurator() {
                   return (
                     <button
                       key={c.id}
-                      onClick={() => setSelectedColor(c)}
+                      onClick={() => {
+                        sound.playClick();
+                        setSelectedColor(c);
+                      }}
                       className={`p-3.5 rounded-2xl border text-left transition-all duration-300 flex items-center gap-3 ${
                         isSelected
                           ? "bg-[#111317] border-white text-white shadow-[0_0_20px_rgba(255,255,255,0.1)]"
@@ -305,25 +325,57 @@ export default function CarConfigurator() {
               </div>
             </div>
 
-            {/* Save / Bookmark Concept Action */}
-            <div className="pt-2">
-              <button
-                onClick={handleSave}
-                className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/20 text-white font-semibold text-xs uppercase tracking-[0.2em] transition-all duration-300 active:scale-98"
-              >
-                <Bookmark className="w-4 h-4 text-neonRed" />
-                <span>Save Concept Profile (Local)</span>
-              </button>
+            {/* Save / Bookmark & Reserve Action */}
+            <div className="pt-2 space-y-3">
+              {/* Live Price Target */}
+              <div className="p-4 rounded-xl bg-black/60 border border-white/10 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">ESTIMATED TARGET</span>
+                  <p className="text-xl font-bold font-mono text-white">${totalPrice.toLocaleString()} <span className="text-xs text-neutral-400">USD</span></p>
+                </div>
+                <div className="text-right text-[10px] font-mono text-silver/80">
+                  <p className="text-electricBlue font-bold">{selectedAero.name}</p>
+                  <p>{selectedInterior.name}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    sound.playClick();
+                    setReserveModalOpen(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-crimson to-neonRed hover:from-neonRed hover:to-crimson text-white font-bold text-xs uppercase tracking-[0.2em] shadow-[0_0_25px_rgba(255,38,56,0.4)] transition-all active:scale-98"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Reserve Build</span>
+                </button>
+
+                <button
+                  onClick={handleSave}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/20 text-white font-semibold text-xs uppercase tracking-[0.18em] transition-all duration-300 active:scale-98"
+                >
+                  <Bookmark className="w-4 h-4 text-silver" />
+                  <span>Save Config</span>
+                </button>
+              </div>
 
               {savedNotification && (
-                <div className="mt-3 p-3 rounded-lg bg-neonRed/10 border border-neonRed/30 text-neonRed text-xs font-mono text-center">
-                  Configuration saved to local profile.
+                <div className="p-3 rounded-lg bg-electricBlue/10 border border-electricBlue/30 text-electricBlue text-xs font-mono text-center flex items-center justify-center gap-2">
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Configuration saved to browser session.</span>
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
+
+      <ReserveModal
+        isOpen={reserveModalOpen}
+        onClose={() => setReserveModalOpen(false)}
+        selectedColorName={selectedColor.name}
+      />
     </section>
   );
 }

@@ -1,5 +1,9 @@
 import Navbar from "@/components/Navbar";
 import FlyingCarScroll from "@/components/FlyingCarScroll";
+import VehicleViewer3D from "@/components/VehicleViewer3D";
+import FlightDashboard from "@/components/FlightDashboard";
+import VehicleTransformation from "@/components/VehicleTransformation";
+import EngineeringLab from "@/components/EngineeringLab";
 import FlightTechnology from "@/components/FlightTechnology";
 import SpecsSection from "@/components/SpecsSection";
 import CarConfigurator from "@/components/CarConfigurator";
@@ -11,19 +15,31 @@ export default function Home() {
       {/* Navigation */}
       <Navbar />
 
-      {/* Hero & 40-Frame Scrollytelling Experience */}
+      {/* 1. Hero & 40-Frame Cinematic Vector Sequence */}
       <FlyingCarScroll />
 
-      {/* Engineering & Flight Technology */}
+      {/* 2. Interactive Real-Time 3D Vehicle Inspection Laboratory */}
+      <VehicleViewer3D />
+
+      {/* 3. Flight Simulation Avionics Cockpit Dashboard */}
+      <FlightDashboard />
+
+      {/* 4. Ground-to-Air Vehicle Transformation */}
+      <VehicleTransformation />
+
+      {/* 5. Deep-Tech Engineering Laboratory */}
+      <EngineeringLab />
+
+      {/* 6. Advanced Architecture Pillars */}
       <FlightTechnology />
 
-      {/* Concept Specifications */}
+      {/* 7. Concept Specifications Benchmark */}
       <SpecsSection />
 
-      {/* Interactive Configurator */}
+      {/* 8. Interactive Flight Craft Configurator */}
       <CarConfigurator />
 
-      {/* Final CTA & Footer */}
+      {/* 9. Final Call to Action & Footer */}
       <Footer />
     </main>
   );

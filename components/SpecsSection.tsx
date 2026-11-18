@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { VEHICLE_SPECIFICATIONS, AERON_CONCEPT_METADATA } from "../data/vehicle";
 import { Sliders, Info, ShieldCheck, Activity, Zap } from "lucide-react";
+import { sound } from "../utils/audio";
 
 export default function SpecsSection() {
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
@@ -41,7 +42,10 @@ export default function SpecsSection() {
             {categories.map((cat) => (
               <button
                 key={cat}
-                onClick={() => setSelectedCategory(cat)}
+                onClick={() => {
+                  sound.playClick();
+                  setSelectedCategory(cat);
+                }}
                 className={`px-4 py-2 rounded-full text-xs font-mono uppercase tracking-wider transition-all duration-300 ${
                   selectedCategory === cat
                     ? "bg-white text-black font-bold shadow-[0_0_15px_rgba(255,255,255,0.4)]"
